@@ -1,0 +1,509 @@
+{
+  "name": "AI Trading Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-analyze",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        760,
+        -200
+      ],
+      "id": "81b9d753-e5b6-488d-890d-0d06148e40b6",
+      "name": "Webhook",
+      "webhookId": "4720d3b9-6761-406a-9bbe-f92b9fa26f3f"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the analysis in the input, I need you to tell me whether it's a good timing or not to buy Bitcoin. You also need to set parameters for take profit and stop loss levels even if you think it's not a good timing to buy Bitcoin based on this analysis, as well as the current Bitcoin price. Make sure your take profit and stop loss levels do not exceed 5% from the current Bitcoin price {{$node[\"Slack Analysis Post\"].json[\"message\"][\"text\"]}}.  \nYour message must be concise, only output a 3 sentences analysis, and **only** exactly this at the end (no extra text): \n```\nTake Profit X, Stop Loss Y, Buy Z\n``` \nwhere `X` and `Y` are your computed levels, and where `Z` is your decision to buy Bitcoin or not (\"Yes\" or \"No\"). Do not put the number range in `X` and `Y`, put exact number, such as \"Take Profit 130000, Stop Loss 80000, Buy Yes\", something like this.\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        1500,
+        -240
+      ],
+      "id": "8786c605-14f9-4a7a-b34c-1315819651f4",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-thinking-exp-1219",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        60
+      ],
+      "id": "f4c216fa-0926-409e-b000-e10d2f5c2c4b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rSXZ9Cxrv6jG1noW",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "echo \"successful\""
+      },
+      "type": "n8n-nodes-base.executeCommandTool",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        80
+      ],
+      "id": "b45f6f2f-1ed8-4401-a2d5-d31d3ea5f191",
+      "name": "Execute Command",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /mnt/d/GitHub/ai-agent-trader && ' +\n   'python3 ai_analyze_supabase_coinapi.py ' +\n   '--symbol '     + $node[\"Edit Fields\"].json[\"symbol\"] + ' ' +\n   '--start-date ' + $node[\"Edit Fields\"].json[\"startDate\"] + ' ' +\n   '--end-date '   + $node[\"Edit Fields\"].json[\"endDate\"] }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        -220
+      ],
+      "id": "8001115b-2d7f-43a5-8826-db5065da424a",
+      "name": "Execute Command, Python Analyze"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{$executionId}}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1600,
+        100
+      ],
+      "id": "a6d45a66-9c79-4b6f-a612-46984028adc2",
+      "name": "Simple Memory1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1ef1e919-1140-409d-befb-626711a0d495",
+              "name": "symbol",
+              "value": "={{$json.body.text.split(\" \")[0]}}",
+              "type": "string"
+            },
+            {
+              "id": "b318d8c9-b15d-408e-b5ef-b4c6de9d469f",
+              "name": "startDate",
+              "value": "={{$json.body.text.split(\" \")[1]}}",
+              "type": "string"
+            },
+            {
+              "id": "36045654-31c2-421f-b11c-5e7f145e594b",
+              "name": "endDate",
+              "value": "={{$json.body.text.split(\" \")[2]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        -280
+      ],
+      "id": "3c1d3f53-f502-4357-89fb-0148ace99a65",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "command": "={{\n  `cd /mnt/d/GitHub/ai-agent-trader && python3 ai_agent_trade.py \"` +\n    // Strip out any markdown fences, trim whitespace, and escape any \" inside\n    $node[\"AI Agent\"].json.output\n      .replace(/```/g, \"\")\n      .trim()\n      .replace(/\"/g, '\\\\\"') +\n  `\"`\n}}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        -240
+      ],
+      "id": "8e245c77-5d8c-4f77-bf8a-aec398e7c582",
+      "name": "Pass AI params to json",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2481ca4-9b82-4f96-a091-57e2b75299fd",
+              "leftValue": "={{$node[\"JSON Parse\"].json[\"data\"][\"buy\"] === \"yes\"}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        -260
+      ],
+      "id": "351b07da-0b5a-4aa0-8e2f-6163bdd20e6b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/mnt/d/GitHub/ai-agent-trader/ai_agent_param.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        -400
+      ],
+      "id": "6afabe0e-6f5f-4a9a-a65e-079a9a60f169",
+      "name": "Read File"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        2280,
+        -480
+      ],
+      "id": "ea9f26ca-0261-447a-92ba-87b0a80462f0",
+      "name": "JSON Parse"
+    },
+    {
+      "parameters": {
+        "command": "=cd /mnt/d/GitHub/ai-agent-trader && \\\npython3 mexc_buy.py yes"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2500,
+        -400
+      ],
+      "id": "f2f9fcf9-4afa-431b-b9c0-40a0234b041d",
+      "name": "Execute Command - MEXC Buy"
+    },
+    {
+      "parameters": {
+        "command": "cd /mnt/d/GitHub/ai-agent-trader && \\\npython3 mexc_check_balance_and_sell.py"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2720,
+        -440
+      ],
+      "id": "f8634cac-f068-4374-a1a7-c69ffd4c02e2",
+      "name": "Execute Command - MEXC Check Balance and Sell"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08P4LY4GH1",
+          "mode": "list",
+          "cachedResultName": "all-datara"
+        },
+        "text": "The agent didn't want to buy.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2720,
+        -240
+      ],
+      "id": "773a8b84-84ae-4c82-aeab-9bf713c1c975",
+      "name": "Slack No",
+      "webhookId": "1551bc3e-06a0-4af5-826f-3d116d37fbb3",
+      "credentials": {
+        "slackApi": {
+          "id": "g3WP4SwmIdSXVawz",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08P4LY4GH1",
+          "mode": "list",
+          "cachedResultName": "all-datara"
+        },
+        "text": "The agent decided to buy. Check your positions",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2940,
+        -440
+      ],
+      "id": "6c048805-84ac-4a3d-8924-409814b0222d",
+      "name": "Slack Yes",
+      "webhookId": "98d96407-17af-4bad-a645-a0dbe7200b41",
+      "credentials": {
+        "slackApi": {
+          "id": "g3WP4SwmIdSXVawz",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08P4LY4GH1",
+          "mode": "list",
+          "cachedResultName": "all-datara"
+        },
+        "text": "={{$node[\"Execute Command, Python Analyze\"].json[\"stdout\"]}}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1260,
+        0
+      ],
+      "id": "1ac240ec-a7d6-4aef-b4df-d69b9f598d0d",
+      "name": "Slack Analysis Post",
+      "webhookId": "5d066bf0-4b6c-4c1e-813a-439c3fdef29d",
+      "credentials": {
+        "slackApi": {
+          "id": "g3WP4SwmIdSXVawz",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "AI Agent": [
+      {
+        "json": {
+          "output": "Okay, let's work through setting Stop Loss (SL) and Take Profit (TP) parameters based on this updated analysis, still using your **entry level of 100**.\n\n**Crucial Observation Again:** This analysis, like the previous one, focuses heavily on price action significantly *higher* than your 100 entry point. It identifies a bottom at **~220**, current action recovering towards **270**, and resistance around **280-300**. This means the direct support (220) and resistance (280-300) levels identified are not immediately adjacent to your 100 entry.\n\nWe must again proceed by applying the *principles* of the analysis rather than the specific levels, while acknowledging the large gap.\n\n**1. Stop Loss (SL):**\n\n*   **Context:** The analysis emphasizes **volatility clustering** (periods of high volatility grouping together) and identifies **~220** as *critical support* after a potential capitulation low.\n*   **Challenge:** The critical support at 220 is irrelevant for an SL below 100. No support levels near 100 are mentioned. Volatility clustering implies that sharp moves can happen, making tight stops risky during active periods.\n*   **Suggestion:** Given the lack of nearby technical support in the analysis and the mention of high volatility clustering, the SL needs to be based primarily on your risk tolerance relative to the 100 entry.\n    *   **Potential SL:** A level like **~90** (10 points / 10% risk) or perhaps slightly wider like **~85** (15 points / 15% risk) could be considered. This aims to provide some buffer against volatility without a specific technical level below 100 from the analysis to rely on. The choice depends heavily on your risk appetite.\n\n**2. Take Profit (TP):**\n\n*   **Context:** The analysis describes a strong rebound after the ~220 low, suggesting a potential trend reversal, and identifies **~280-300** as the next significant resistance area (previous breakdown zone). The market was seen recovering towards 270 at the time of analysis.\n*   **Challenge:** The primary resistance levels (280-300) are extremely far from the 100 entry.\n*   **Suggestion:**\n    *   **Initial TP (Risk/Reward based):** A logical first step is targeting a positive risk/reward ratio. If using a 10-point SL (100 -> 90), a 1:2 R:R targets 100 + (2 * 10) = **120**. A 1:3 R:R targets 100 + (3 * 10) = **130**. If using a 15-point SL (100 -> 85), 1:2 R:R targets 100 + (2*15) = **130**. These offer realistic initial profit goals.\n    *   **Major Target (Based on Analyzed Low):** The **~220** level, identified as the crucial low and potential turning point in the analysis, serves as a significant psychological and technical milestone. Reaching this level from 100 would represent capturing a move analogous in *magnitude* (though starting lower) to the recovery described. This is a major, ambitious target.\n    *   **Ultimate Targets (Based on Analyzed Resistance):** The **~280-300** zone represents the resistance identified in the analysis. Reaching these levels from 100 would require an exceptionally strong and sustained bull run, making them very long-term, highly ambitious targets.\n\n**Summary Recommendation (Given Entry 100):**\n\n*   **Stop Loss:** Consider **~90** or **~85** (adjust based on personal risk tolerance and observed volatility near 100).\n*   **Take Profit 1:** Consider **~120 - 130** (Based on achieving 1:2 or 1:3 Risk/Reward).\n*   **Take Profit 2 (Major Milestone):** Consider **~220** (Aligning with the analyzed key low).\n*   **Take Profit 3 (Ambitious Resistance):** **~280 - 300** (Aligning with analyzed resistance).\n\n**Actionable Advice:**\n\n1.  **Verify Entry Context:** Seriously reconsider if the 100 entry point is correct in the context of an analysis focused on the 220-300+ range. The discrepancy strongly suggests the analysis might not be applicable to the current situation if the price is truly near 100.\n2.  **Factor in Volatility:** Be prepared for potentially wider price swings than usual, as indicated by \"volatility clustering.\" This might influence position sizing or require more dynamic trade management.\n3.  **Watch Volume:** As the analysis stresses, volume is key. Look for increasing volume on moves towards your TP and decreasing volume on pullbacks to support the trade's validity."
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Pass AI params to json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command, Python Analyze": {
+      "main": [
+        [
+          {
+            "node": "Slack Analysis Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Execute Command, Python Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass AI params to json": {
+      "main": [
+        [
+          {
+            "node": "Read File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - MEXC Buy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack No",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read File": {
+      "main": [
+        [
+          {
+            "node": "JSON Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Parse": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command - MEXC Buy": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - MEXC Check Balance and Sell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command - MEXC Check Balance and Sell": {
+      "main": [
+        [
+          {
+            "node": "Slack Yes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Analysis Post": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "21434085-fa5d-4c52-9390-d3b0f3aac042",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "357cfb9b36d8c08fecb1688f9e5056c675d84ce01c39161ae55a5d06e8ee4163"
+  },
+  "id": "hFza4uwLWV37rH7B",
+  "tags": []
+}
