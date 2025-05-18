@@ -32,7 +32,7 @@ def fetch_data_from_supabase(db_url, symbol, start_date, end_date):
         """
         cur.execute(query, (symbol, start_date, end_date))
         rows = cur.fetchall()
-        print(f"✅ Found {len(rows)} records.")
+        print(f"✅ Found {len(rows)} records for {symbol}.")
         return rows
     except psycopg2.Error as e:
         print(f"Database error: {e}")
@@ -43,13 +43,13 @@ def fetch_data_from_supabase(db_url, symbol, start_date, end_date):
             conn.close()
             print("✅ Database connection closed.")
 
-def format_data_for_prompt(data):
+def format_data_for_prompt(data, symbol):
     """Formats the fetched data into a string for the Gemini prompt."""
     if not data:
-        return "No data available for the specified range."
+        return f"No data available for {symbol} in the specified range."
 
-    header = "Date        Open    High    Low     Close   Volume\n"
-    data_str = header + "-" * (len(header) -1) + "\n"
+    header = f"{symbol} Data:\nDate        Open    High    Low     Close   Volume\n"
+    data_str = header + "-" * (len(header.split('\n')[1]) -1) + "\n"
 
     for row in data:
         date_str = row[0].strftime('%Y-%m-%d')
@@ -88,10 +88,10 @@ def get_wbtc_usdt_price(api_key):
         return None
 
 
-def analyze_with_gemini(api_key, data_str, btc_price=None):
+def analyze_with_gemini(api_key, stock_data_str, btc_data_str, btc_price=None):
     """Sends the data to Gemini API for analysis."""
-    if "No data available" in data_str:
-        return data_str 
+    if "No data available" in stock_data_str and "No data available" in btc_data_str:
+        return "No data available for analysis." 
 
     try:
         print("Configuring Gemini API...")
@@ -105,10 +105,17 @@ def analyze_with_gemini(api_key, data_str, btc_price=None):
             btc_info = f"\n\nThe current WBTC/USDT price is: {btc_price}"
 
         # Prepare the prompt for AI analysis    
-        prompt = f"You are a financial data analyst. Analyze the following stock market OHLCV data and provide insights on potential trends or patterns:{btc_info}\n\n{data_str}"
-        
-        if btc_price is not None:
-            prompt += f"\n\nInclude in your analysis how this historical stock data might affect the current WBTC/USDT price of {btc_price}. Typically, there's no direct correlation between stock market and crypto market but you need to make this correlation since Bitcoin often follow the stock market trends."
+        prompt = f"""You are a financial data analyst. Analyze the following data sets:
+
+{stock_data_str}
+
+{btc_data_str}{btc_info}
+
+Please provide:
+1. Independent analysis of both datasets, highlighting key trends and price action patterns
+2. Make comparative trend analysis between the stock and Bitcoin during this period, including correlation analysis
+3. How this comparison might help predict or explain the current Bitcoin price of {btc_price if btc_price else 'N/A'}
+4. If the trends that you see from both datasets may suggest any potential prediction of future Bitcoin price, please include that as well."""
 
         print("Sending data to AI for analysis...")
         response = model.generate_content(prompt)
@@ -119,7 +126,7 @@ def analyze_with_gemini(api_key, data_str, btc_price=None):
         return f"Error during Gemini analysis: {e}"
 
 def main():
-    parser = argparse.ArgumentParser(description="Fetch stock data from Supabase and analyze with Gemini.")
+    parser = argparse.ArgumentParser(description="Fetch stock data and BTC data, then analyze with Gemini.")
     parser.add_argument("--symbol", required=True, help="Stock symbol (e.g., AAPL)")
     parser.add_argument("--start-date", required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", required=True, help="End date (YYYY-MM-DD)")
@@ -141,22 +148,32 @@ def main():
         print("Error: GEMINI_API_KEY environment variable not set.")
         return
 
-
-    data = fetch_data_from_supabase(DATABASE_URL, args.symbol, args.start_date, args.end_date)
-
-    if data is None: # Check if fetch failed due to DB error
-        print("Exiting due to database error.")
+    # Fetch data for the user-specified symbol
+    stock_data = fetch_data_from_supabase(DATABASE_URL, args.symbol, args.start_date, args.end_date)
+    if stock_data is None:
+        print("Exiting due to database error when fetching stock data.")
+        return
+    
+    # Automatically fetch BTC data for the same date range
+    btc_symbol = "BTCUSD"
+    print(f"Also fetching {btc_symbol} data for the same time period...")
+    btc_data = fetch_data_from_supabase(DATABASE_URL, btc_symbol, args.start_date, args.end_date)
+    if btc_data is None:
+        print(f"Exiting due to database error when fetching {btc_symbol} data.")
         return
 
-    formatted_data = format_data_for_prompt(data)
+    # Format both datasets
+    formatted_stock_data = format_data_for_prompt(stock_data, args.symbol)
+    formatted_btc_data = format_data_for_prompt(btc_data, btc_symbol)
     
-    # Get current BTC price from CoinAPI and analyze if available
+    # Get current BTC (WBTC) price from CoinAPI
     btc_price = get_wbtc_usdt_price(COINAPI_KEY)
-    analysis = analyze_with_gemini(GEMINI_API_KEY, formatted_data, btc_price)
+    
+    # Analyze both datasets together
+    analysis = analyze_with_gemini(GEMINI_API_KEY, formatted_stock_data, formatted_btc_data, btc_price)
 
-    print("AI Analysis Result:")
+    print("\nAI Analysis Result:")
     print(analysis)
-    print("-----------------------\n")
 
 if __name__ == "__main__":
     main()
